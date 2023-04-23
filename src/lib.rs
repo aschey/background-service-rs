@@ -24,13 +24,14 @@ pub trait BackgroundService: Send {
 }
 
 #[async_trait]
-impl<F, Fut> BackgroundService for (String, F)
+impl<S, F, Fut> BackgroundService for (S, F)
 where
+    S: AsRef<str> + Send,
     F: FnOnce(ServiceContext) -> Fut + Send,
     Fut: Future<Output = Result<(), BoxedError>> + Send,
 {
     fn name(&self) -> &str {
-        &self.0
+        self.0.as_ref()
     }
 
     async fn run(mut self, context: ServiceContext) -> Result<(), BoxedError> {
