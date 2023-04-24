@@ -21,6 +21,10 @@ impl ServiceContext {
     }
 
     pub fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.clone()
+    }
+
+    pub fn child_token(&self) -> CancellationToken {
         self.cancellation_token.child_token()
     }
 

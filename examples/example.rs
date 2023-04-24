@@ -9,7 +9,8 @@ use tracing::info;
 #[tokio::main]
 pub async fn main() {
     tracing_subscriber::fmt::init();
-    let manager = BackgroundServiceManager::new(CancellationToken::default());
+    let token = CancellationToken::default();
+    let manager = BackgroundServiceManager::new(token.clone());
     let mut context = manager.get_context();
     context
         .add_service(("simple".to_owned(), |context: ServiceContext| async move {
@@ -17,7 +18,7 @@ pub async fn main() {
             let cancellation_token = context.cancellation_token();
             loop {
                 tokio::select! {
-                    _ = tokio:: time:: sleep(Duration::from_secs(1)) => {
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
                         info!("Service has been running for {seconds} seconds");
                         seconds += 1;
                     }
@@ -32,9 +33,12 @@ pub async fn main() {
         .unwrap();
 
     context.add_service(Service).await.unwrap();
-
-    tokio::time::sleep(Duration::from_secs(10)).await;
-    manager.stop().await.unwrap();
+    let token = context.cancellation_token();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        token.cancel();
+    });
+    manager.join_on_cancel().await.unwrap();
 }
 struct Service;
 
