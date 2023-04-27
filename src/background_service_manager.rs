@@ -3,7 +3,6 @@ use crate::{
     service_info::ServiceInfo,
     ServiceContext,
 };
-use futures::future::join_all;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -27,31 +26,12 @@ impl BackgroundServiceManager {
         self.cancellation_token.cancel();
     }
 
-    pub async fn join(self) -> Result<(), BackgroundServiceErrors> {
-        let mut errors = vec![];
-        if let Some(services) = self.services.write().await.take() {
-            let names: Vec<_> = services.iter().map(|s| s.name.clone()).collect();
-            let results = join_all(services.into_iter().map(|s| s.handle)).await;
-
-            for (i, result) in results.into_iter().enumerate() {
-                match result {
-                    Ok(Ok(_)) => {}
-                    Ok(Err(e)) => errors.push(BackgroundServiceError::ExecutionFailure(
-                        names[i].to_owned(),
-                        e,
-                    )),
-                    Err(e) => errors.push(BackgroundServiceError::ExecutionPanic(
-                        names[i].to_owned(),
-                        e,
-                    )),
-                }
-            }
+    #[cfg(feature = "signal")]
+    pub async fn cancel_on_signal(self) -> Result<(), BackgroundServiceErrors> {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!("Error waiting for shutdown signal: {e:?}");
         }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(BackgroundServiceErrors(errors))
-        }
+        self.cancel().await
     }
 
     pub async fn join_on_cancel(self) -> Result<(), BackgroundServiceErrors> {
