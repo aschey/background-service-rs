@@ -12,27 +12,24 @@ pub async fn main() {
     let token = CancellationToken::default();
     let manager = BackgroundServiceManager::new(token.clone());
     let mut context = manager.get_context();
-    context
-        .add_service(("simple".to_owned(), |context: ServiceContext| async move {
-            let mut seconds = 0;
-            let cancellation_token = context.cancellation_token();
-            loop {
-                tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                        info!("Service has been running for {seconds} seconds");
-                        seconds += 1;
-                    }
-                    _ = cancellation_token.cancelled() => {
-                        info!("Received cancellation request");
-                        return Ok(());
-                    }
+    context.add_service(("simple".to_owned(), |context: ServiceContext| async move {
+        let mut seconds = 0;
+        let cancellation_token = context.cancellation_token();
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    info!("Service has been running for {seconds} seconds");
+                    seconds += 1;
+                }
+                _ = cancellation_token.cancelled() => {
+                    info!("Received cancellation request");
+                    return Ok(());
                 }
             }
-        }))
-        .await
-        .unwrap();
+        }
+    }));
 
-    context.add_service(Service).await.unwrap();
+    context.add_service(Service);
     let token = context.cancellation_token();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(10)).await;
@@ -64,7 +61,7 @@ impl BackgroundService for Service {
                         context.cancellation_token().cancelled().await;
                         info!("Received cancellation request");
                         Ok(())
-                    })).await.unwrap();
+                    }));
                 }
                 _ = cancellation_token.cancelled() => {
                     info!("Received cancellation request. Waiting 1 second to shut down.");

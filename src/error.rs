@@ -15,10 +15,4 @@ pub enum BackgroundServiceError {
     ExecutionPanic(String, JoinError),
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum AddServiceError {
-    #[error("Unable to add the service because the service manager has already been stopped")]
-    ManagerStopped,
-}
-
 pub type BoxedError = Box<dyn Error + Send + Sync + 'static>;
