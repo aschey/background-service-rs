@@ -1,7 +1,10 @@
-use crate::{service_info::ServiceInfo, BackgroundService};
-use crossbeam::queue::SegQueue;
 use std::sync::Arc;
+
+use crossbeam::queue::SegQueue;
 use tokio_util::sync::CancellationToken;
+
+use crate::service_info::ServiceInfo;
+use crate::BackgroundService;
 
 #[derive(Clone)]
 pub struct ServiceContext {

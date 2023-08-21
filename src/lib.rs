@@ -1,18 +1,15 @@
-use async_trait::async_trait;
-use error::BoxedError;
-use futures::Future;
-use std::time::Duration;
-
 mod background_service_manager;
-
-pub use background_service_manager::*;
-
 pub mod error;
 mod service_context;
-
-pub use service_context::*;
-
 mod service_info;
+
+use std::time::Duration;
+
+use async_trait::async_trait;
+pub use background_service_manager::*;
+use error::BoxedError;
+use futures::Future;
+pub use service_context::*;
 
 #[async_trait]
 pub trait BackgroundService: Send {

@@ -1,9 +1,25 @@
 use std::error::Error;
+
 use tokio::task::JoinError;
 
 #[derive(thiserror::Error, Debug)]
 #[error("Some background services failed to execute: {0:?}")]
 pub struct BackgroundServiceErrors(pub Vec<BackgroundServiceError>);
+
+impl BackgroundServiceErrors {
+    pub fn timed_out(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .filter_map(|err| {
+                if let BackgroundServiceError::TimedOut(name) = err {
+                    Some(name.to_owned())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum BackgroundServiceError {

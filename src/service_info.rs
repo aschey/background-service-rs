@@ -1,6 +1,8 @@
-use crate::error::BoxedError;
 use std::time::Duration;
+
 use tokio::task::JoinHandle;
+
+use crate::error::BoxedError;
 
 #[derive(Debug)]
 pub(crate) struct ServiceInfo {

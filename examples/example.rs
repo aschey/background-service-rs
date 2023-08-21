@@ -1,8 +1,8 @@
-use async_trait::async_trait;
-use background_service::{
-    error::BoxedError, BackgroundService, BackgroundServiceManager, ServiceContext,
-};
 use std::time::Duration;
+
+use async_trait::async_trait;
+use background_service::error::BoxedError;
+use background_service::{BackgroundService, BackgroundServiceManager, ServiceContext, Settings};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -10,7 +10,7 @@ use tracing::info;
 pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
-    let manager = BackgroundServiceManager::new(token.clone());
+    let manager = BackgroundServiceManager::new(token.clone(), Settings::default());
     let mut context = manager.get_context();
     context.add_service(("simple".to_owned(), |context: ServiceContext| async move {
         let mut seconds = 0;
@@ -53,7 +53,7 @@ impl BackgroundService for Service {
         let cancellation_token = context.cancellation_token();
         loop {
             tokio::select! {
-                _ = tokio:: time:: sleep(Duration::from_secs(3)) => {
+                _ = tokio::time::sleep(Duration::from_secs(3)) => {
                     info!("Spawning another service");
 
                     context.add_service(("child".to_owned(), |context: ServiceContext| async move {
