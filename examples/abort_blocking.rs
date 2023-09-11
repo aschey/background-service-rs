@@ -17,6 +17,7 @@ pub async fn main() {
 
     context.add_service(("blocking".to_owned(), |_: ServiceContext| async move {
         let orig_thread_id = format!("{:?}", thread::current().id());
+        let mut switched = false;
         loop {
             println!("{:?}: blocking still alive", thread::current().id());
             thread::sleep(Duration::from_secs(2));
@@ -24,9 +25,12 @@ pub async fn main() {
                 // here we loop and sleep until we switch threads, once we do, we never call await
                 // again blocking all progress on all other tasks forever
                 let thread_id = format!("{:?}", thread::current().id());
-                if thread_id == orig_thread_id {
+                if !switched && thread_id == orig_thread_id {
+                    println!("waiting to switch threads");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 } else {
+                    switched = true;
+                    println!("switched threads, blocking forever");
                     break;
                 }
             }
@@ -52,11 +56,13 @@ pub async fn main() {
     if let Err(e) = res {
         // one or more services timed out
         if !e.timed_out().is_empty() {
+            println!("task timed out");
             // the blocking task will still be running here while the nonblocking was successfilly
             // aborted.
             tokio::time::sleep(Duration::from_secs(5)).await;
             // Tokio could hang forever while trying to shut down if a task is stuck in a blocking
             // state. Forcing a process exit here prevents this.
+            println!("force exit");
             process::exit(1);
         }
     }

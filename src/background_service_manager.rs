@@ -3,6 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crossbeam::queue::SegQueue;
+use futures::stream::FuturesUnordered;
+use futures::{future, StreamExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
@@ -79,25 +81,37 @@ impl BackgroundServiceManager {
 
     pub async fn cancel(self) -> Result<(), BackgroundServiceErrors> {
         self.cancellation_token.cancel();
-        let mut errors = vec![];
+
+        let unordered = FuturesUnordered::new();
         while let Some(service) = self.services.pop() {
-            let abort_handle = service.handle.abort_handle();
-            match tokio::time::timeout(service.timeout, service.handle).await {
-                Ok(Ok(Ok(_))) => info!("Worker {} shutdown successfully", service.name),
-                Ok(Ok(Err(e))) => errors.push(BackgroundServiceError::ExecutionFailure(
-                    service.name.to_owned(),
-                    e,
-                )),
-                Ok(Err(e)) => errors.push(BackgroundServiceError::ExecutionPanic(
-                    service.name.to_owned(),
-                    e,
-                )),
-                Err(_) => {
-                    errors.push(BackgroundServiceError::TimedOut(service.name.to_owned()));
-                    abort_handle.abort();
+            unordered.push(async move {
+                let abort_handle = service.handle.abort_handle();
+                match tokio::time::timeout(service.timeout, service.handle).await {
+                    Ok(Ok(Ok(_))) => {
+                        info!("Worker {} shutdown successfully", service.name);
+                        Ok(())
+                    }
+                    Ok(Ok(Err(e))) => Err(BackgroundServiceError::ExecutionFailure(
+                        service.name.to_owned(),
+                        e,
+                    )),
+                    Ok(Err(e)) => Err(BackgroundServiceError::ExecutionPanic(
+                        service.name.to_owned(),
+                        e,
+                    )),
+                    Err(_) => {
+                        abort_handle.abort();
+                        Err(BackgroundServiceError::TimedOut(service.name.to_owned()))
+                    }
                 }
-            }
+            });
         }
+
+        let errors = unordered
+            .filter_map(|r| future::ready(r.err()))
+            .collect::<Vec<_>>()
+            .await;
+
         if errors.is_empty() {
             Ok(())
         } else {
