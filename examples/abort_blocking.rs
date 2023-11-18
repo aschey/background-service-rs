@@ -15,7 +15,7 @@ pub async fn main() {
     let manager = BackgroundServiceManager::new(token.clone(), Settings::default().monitor_interval(Duration::from_secs(2)));
     let mut context = manager.get_context();
 
-    context.add_service(("blocking".to_owned(), |_: ServiceContext| async move {
+    context.add_service(("blocking", |_: ServiceContext| async move {
         let orig_thread_id = format!("{:?}", thread::current().id());
         let mut switched = false;
         loop {
@@ -37,7 +37,7 @@ pub async fn main() {
         }
     }));
 
-    context.add_service(("nonblocking".to_owned(), |_: ServiceContext| async move {
+    context.add_service(("nonblocking", |_: ServiceContext| async move {
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
             println!("{:?}: nonblocking still alive", thread::current().id());
@@ -57,7 +57,7 @@ pub async fn main() {
         // one or more services timed out
         if !e.timed_out().is_empty() {
             println!("task timed out");
-            // the blocking task will still be running here while the nonblocking was successfilly
+            // the blocking task will still be running here while the nonblocking was successfully
             // aborted.
             tokio::time::sleep(Duration::from_secs(5)).await;
             // Tokio could hang forever while trying to shut down if a task is stuck in a blocking

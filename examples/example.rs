@@ -12,7 +12,7 @@ pub async fn main() {
     let token = CancellationToken::default();
     let manager = BackgroundServiceManager::new(token.clone(), Settings::default());
     let mut context = manager.get_context();
-    context.add_service(("simple".to_owned(), |context: ServiceContext| async move {
+    context.add_service(("simple", |context: ServiceContext| async move {
         let mut seconds = 0;
         let cancellation_token = context.cancellation_token();
         loop {
@@ -56,7 +56,7 @@ impl BackgroundService for Service {
                 _ = tokio::time::sleep(Duration::from_secs(3)) => {
                     info!("Spawning another service");
 
-                    context.add_service(("child".to_owned(), |context: ServiceContext| async move {
+                    context.add_service(("child", |context: ServiceContext| async move {
                         info!("Service waiting for cancellation");
                         context.cancellation_token().cancelled().await;
                         info!("Received cancellation request");
