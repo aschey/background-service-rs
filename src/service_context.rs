@@ -1,6 +1,5 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
-use crossbeam::queue::SegQueue;
 use tokio_util::sync::CancellationToken;
 
 use crate::service_info::ServiceInfo;
@@ -8,13 +7,13 @@ use crate::BackgroundService;
 
 #[derive(Clone)]
 pub struct ServiceContext {
-    services: Arc<SegQueue<ServiceInfo>>,
+    services: Arc<RwLock<Vec<ServiceInfo>>>,
     cancellation_token: CancellationToken,
 }
 
 impl ServiceContext {
     pub(crate) fn new(
-        services: Arc<SegQueue<ServiceInfo>>,
+        services: Arc<RwLock<Vec<ServiceInfo>>>,
         cancellation_token: CancellationToken,
     ) -> Self {
         Self {
@@ -35,7 +34,7 @@ impl ServiceContext {
         let context = self.clone();
         let name = service.name().to_owned();
         let handle = tokio::spawn(async move { service.run(context).await });
-        self.services.push(ServiceInfo {
+        self.services.write().unwrap().push(ServiceInfo {
             handle,
             name,
             timeout: S::shutdown_timeout(),

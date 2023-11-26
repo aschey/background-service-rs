@@ -1,10 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use crossbeam::queue::SegQueue;
 use futures::stream::FuturesUnordered;
 use futures::{future, StreamExt};
+use futures_cancel::FutureExt;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
@@ -14,15 +14,33 @@ use crate::ServiceContext;
 
 static MONITOR_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-#[derive(Default, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Settings {
-    monitor_interval: Option<Duration>,
+    blocking_task_monitor_interval: Option<Duration>,
+    completed_task_monitor_interval: Duration,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            blocking_task_monitor_interval: None,
+            completed_task_monitor_interval: Duration::from_secs(1),
+        }
+    }
 }
 
 impl Settings {
-    pub fn monitor_interval(self, interval: Duration) -> Self {
+    pub fn blocking_task_monitor_interval(self, interval: Duration) -> Self {
         Self {
-            monitor_interval: Some(interval),
+            blocking_task_monitor_interval: Some(interval),
+            ..self
+        }
+    }
+
+    pub fn completed_task_monitor_interval(self, interval: Duration) -> Self {
+        Self {
+            completed_task_monitor_interval: interval,
+            ..self
         }
     }
 }
@@ -30,12 +48,12 @@ impl Settings {
 #[derive(Debug)]
 pub struct BackgroundServiceManager {
     cancellation_token: CancellationToken,
-    services: Arc<SegQueue<ServiceInfo>>,
+    services: Arc<RwLock<Vec<ServiceInfo>>>,
 }
 
 impl BackgroundServiceManager {
     pub fn new(cancellation_token: CancellationToken, settings: Settings) -> Self {
-        if let Some(monitor_interval) = settings.monitor_interval {
+        if let Some(monitor_interval) = settings.blocking_task_monitor_interval {
             if !MONITOR_INITIALIZED.swap(true, Ordering::SeqCst) {
                 debug!("initializing monitor");
                 let cancellation_token = cancellation_token.clone();
@@ -56,8 +74,44 @@ impl BackgroundServiceManager {
             }
         }
 
+        let services = Arc::new(RwLock::new(vec![]));
+        let services_ = services.clone();
+        let interval = settings.completed_task_monitor_interval;
+        let mut context = ServiceContext::new(services.clone(), cancellation_token.clone());
+        context.add_service((
+            "completed_task_reaper",
+            move |context: ServiceContext| async move {
+                loop {
+                    if tokio::time::sleep(interval)
+                        .cancel_on_shutdown(&context.cancellation_token())
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+
+                    let mut remove_indexes = vec![];
+                    for (i, service) in services_.read().unwrap().iter().enumerate() {
+                        if service.handle.is_finished() {
+                            info!("Removing service {:?}", service.name);
+                            remove_indexes.push(i);
+                        }
+                    }
+                    if !remove_indexes.is_empty() {
+                        remove_indexes.reverse();
+                        let mut services_mut = services_.write().unwrap();
+                        for index in remove_indexes {
+                            services_mut.remove(index);
+                        }
+                    }
+                }
+
+                Ok(())
+            },
+        ));
+
         Self {
-            services: Default::default(),
+            services,
             cancellation_token,
         }
     }
@@ -83,7 +137,8 @@ impl BackgroundServiceManager {
         self.cancellation_token.cancel();
 
         let unordered = FuturesUnordered::new();
-        while let Some(service) = self.services.pop() {
+        let mut services = self.services.write().unwrap();
+        while let Some(service) = services.pop() {
             unordered.push(async move {
                 let abort_handle = service.handle.abort_handle();
                 match tokio::time::timeout(service.timeout, service.handle).await {

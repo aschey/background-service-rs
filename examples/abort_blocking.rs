@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
-    let manager = BackgroundServiceManager::new(token.clone(), Settings::default().monitor_interval(Duration::from_secs(2)));
+    let manager = BackgroundServiceManager::new(token.clone(), Settings::default().blocking_task_monitor_interval(Duration::from_secs(2)));
     let mut context = manager.get_context();
 
     context.add_service(("blocking", |_: ServiceContext| async move {

@@ -5,12 +5,12 @@ version = "0.1.0"
 
 [dependencies]
 async-trait = "0.1"
-crossbeam = { version = "0.8", features = ["crossbeam-queue"] }
 futures = "0.3"
 thiserror = "1"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
 tokio-util = "0.7"
 tracing = "0.1"
+futures-cancel = { git = "https://github.com/aschey/futures-cancel", rev = "d2c20b78ff5c9e85aa892b51971cc1c1b6b22351" }
 
 [features]
 signal = ["tokio/signal"]

@@ -62,6 +62,11 @@ impl BackgroundService for Service {
                         info!("Received cancellation request");
                         Ok(())
                     }));
+
+                    context.add_service(("child2", |_: ServiceContext| async move {
+                        info!("exiting");
+                        Ok(())
+                    }));
                 }
                 _ = cancellation_token.cancelled() => {
                     info!("Received cancellation request. Waiting 1 second to shut down.");
