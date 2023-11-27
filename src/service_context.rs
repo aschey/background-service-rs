@@ -38,6 +38,7 @@ impl ServiceContext {
     pub fn add_service<S: BackgroundService + 'static>(&mut self, service: S) {
         let context = self.clone();
         let name = service.name().to_owned();
+        let timeout = service.shutdown_timeout();
 
         let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
         let services = self.services.clone();
@@ -62,7 +63,7 @@ impl ServiceContext {
             ServiceInfo {
                 handle,
                 name,
-                timeout: S::shutdown_timeout(),
+                timeout,
             },
         );
     }

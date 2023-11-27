@@ -13,7 +13,7 @@ pub use service_context::*;
 
 #[async_trait]
 pub trait BackgroundService: Send {
-    fn shutdown_timeout() -> Duration {
+    fn shutdown_timeout(&self) -> Duration {
         Duration::from_secs(1)
     }
     fn name(&self) -> &str;

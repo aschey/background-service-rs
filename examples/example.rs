@@ -41,7 +41,7 @@ struct Service;
 
 #[async_trait]
 impl BackgroundService for Service {
-    fn shutdown_timeout() -> Duration {
+    fn shutdown_timeout(&self) -> Duration {
         Duration::from_secs(3)
     }
 
