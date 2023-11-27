@@ -137,29 +137,34 @@ impl BackgroundServiceManager {
         self.cancellation_token.cancel();
 
         let unordered = FuturesUnordered::new();
-        let mut services = self.services.write().unwrap();
-        while let Some(service) = services.pop() {
-            unordered.push(async move {
-                let abort_handle = service.handle.abort_handle();
-                match tokio::time::timeout(service.timeout, service.handle).await {
-                    Ok(Ok(Ok(_))) => {
-                        info!("Worker {} shutdown successfully", service.name);
-                        Ok(())
+
+        {
+            // using a block here to ensure mutex is not held across await
+
+            let mut services = self.services.write().unwrap();
+            while let Some(service) = services.pop() {
+                unordered.push(async move {
+                    let abort_handle = service.handle.abort_handle();
+                    match tokio::time::timeout(service.timeout, service.handle).await {
+                        Ok(Ok(Ok(_))) => {
+                            info!("Worker {} shutdown successfully", service.name);
+                            Ok(())
+                        }
+                        Ok(Ok(Err(e))) => Err(BackgroundServiceError::ExecutionFailure(
+                            service.name.to_owned(),
+                            e,
+                        )),
+                        Ok(Err(e)) => Err(BackgroundServiceError::ExecutionPanic(
+                            service.name.to_owned(),
+                            e,
+                        )),
+                        Err(_) => {
+                            abort_handle.abort();
+                            Err(BackgroundServiceError::TimedOut(service.name.to_owned()))
+                        }
                     }
-                    Ok(Ok(Err(e))) => Err(BackgroundServiceError::ExecutionFailure(
-                        service.name.to_owned(),
-                        e,
-                    )),
-                    Ok(Err(e)) => Err(BackgroundServiceError::ExecutionPanic(
-                        service.name.to_owned(),
-                        e,
-                    )),
-                    Err(_) => {
-                        abort_handle.abort();
-                        Err(BackgroundServiceError::TimedOut(service.name.to_owned()))
-                    }
-                }
-            });
+                });
+            }
         }
 
         let errors = unordered
