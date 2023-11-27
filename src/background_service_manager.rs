@@ -5,10 +5,8 @@ use std::time::Duration;
 use dashmap::DashMap;
 use futures::stream::FuturesUnordered;
 use futures::{future, StreamExt};
-use futures_cancel::FutureExt;
-use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use crate::error::{BackgroundServiceError, BackgroundServiceErrors};
 use crate::service_info::ServiceInfo;
@@ -33,7 +31,6 @@ impl Settings {
 pub struct BackgroundServiceManager {
     cancellation_token: CancellationToken,
     services: Arc<DashMap<u64, ServiceInfo>>,
-    notify_tx: mpsc::Sender<u64>,
 }
 
 impl BackgroundServiceManager {
@@ -59,38 +56,8 @@ impl BackgroundServiceManager {
             }
         }
 
-        let services = Arc::new(DashMap::new());
-        let (notify_tx, mut notify_rx) = mpsc::channel(32);
-        let services_ = services.clone();
-
-        let mut context = ServiceContext::new(
-            services.clone(),
-            notify_tx.clone(),
-            cancellation_token.clone(),
-        );
-        context.add_service((
-            "completed_task_monitor",
-            move |context: ServiceContext| async move {
-                while let Ok(Some(completed)) = notify_rx
-                    .recv()
-                    .cancel_on_shutdown(&context.cancellation_token())
-                    .await
-                {
-                    if let Some((_, service)) = services_.remove(&completed) {
-                        info!("Removing {}", service.name);
-                        if let Err(e) = service.handle.await {
-                            error!("Service {} exited with error: {e:?}", service.name);
-                        }
-                    }
-                }
-
-                Ok(())
-            },
-        ));
-
         Self {
-            services,
-            notify_tx,
+            services: Default::default(),
             cancellation_token,
         }
     }
@@ -156,10 +123,6 @@ impl BackgroundServiceManager {
     }
 
     pub fn get_context(&self) -> ServiceContext {
-        ServiceContext::new(
-            self.services.clone(),
-            self.notify_tx.clone(),
-            self.cancellation_token.clone(),
-        )
+        ServiceContext::new(self.services.clone(), self.cancellation_token.clone())
     }
 }
