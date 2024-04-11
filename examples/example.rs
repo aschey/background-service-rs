@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use background_service::error::BoxedError;
 use background_service::{BackgroundService, BackgroundServiceManager, ServiceContext, Settings};
 use tokio_util::sync::CancellationToken;
@@ -39,7 +38,6 @@ pub async fn main() {
 }
 struct Service;
 
-#[async_trait]
 impl BackgroundService for Service {
     fn shutdown_timeout(&self) -> Duration {
         Duration::from_secs(3)
@@ -49,7 +47,7 @@ impl BackgroundService for Service {
         "service"
     }
 
-    async fn run(mut self, mut context: ServiceContext) -> Result<(), BoxedError> {
+    async fn run(self, mut context: ServiceContext) -> Result<(), BoxedError> {
         let cancellation_token = context.cancellation_token();
         loop {
             tokio::select! {
