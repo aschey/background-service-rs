@@ -1,6 +1,5 @@
 // taken from the blocking issue example here https://github.com/tokio-rs/tokio/issues/4730#issuecomment-1147165954
 
-
 use std::process::{self};
 use std::thread;
 use std::time::Duration;
@@ -12,7 +11,10 @@ use tokio_util::sync::CancellationToken;
 pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
-    let manager = BackgroundServiceManager::new(token.clone(), Settings::default().blocking_task_monitor_interval(Duration::from_secs(2)));
+    let manager = BackgroundServiceManager::new(
+        token.clone(),
+        Settings::default().blocking_task_monitor_interval(Duration::from_secs(2)),
+    );
     let context = manager.get_context();
 
     context.spawn(("blocking", |_: ServiceContext| async move {
@@ -44,10 +46,9 @@ pub async fn main() {
         }
     }));
 
-    let token = context.cancellation_token();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
-        token.cancel();
+        context.cancel_all();
         println!("cancelled");
     });
 

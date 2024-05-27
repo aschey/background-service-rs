@@ -5,11 +5,11 @@ use dashmap::DashMap;
 use futures::Future;
 use tokio::runtime::Handle;
 use tokio::task::LocalSet;
-use tokio_util::sync::CancellationToken;
+use tokio_util::sync::{CancellationToken, WaitForCancellationFuture};
 use tokio_util::task::TaskTracker;
 use tracing::{error, info};
 
-use crate::error::BoxedError;
+use crate::error::{BackgroundServiceError, BoxedError};
 use crate::service_info::ServiceInfo;
 use crate::{BackgroundService, BlockingBackgroundService, LocalBackgroundService};
 
@@ -26,7 +26,9 @@ fn next_id() -> TaskId {
 pub struct ServiceContext {
     services: Arc<DashMap<TaskId, ServiceInfo>>,
     tracker: TaskTracker,
-    cancellation_token: CancellationToken,
+    root_token: CancellationToken,
+    self_token: CancellationToken,
+    child_token: CancellationToken,
 }
 
 impl ServiceContext {
@@ -36,18 +38,20 @@ impl ServiceContext {
         cancellation_token: CancellationToken,
     ) -> Self {
         Self {
-            cancellation_token,
+            root_token: cancellation_token.clone(),
+            self_token: cancellation_token.clone(),
+            child_token: cancellation_token.child_token(),
             tracker,
             services,
         }
     }
 
-    pub fn cancellation_token(&self) -> CancellationToken {
-        self.cancellation_token.clone()
-    }
-
-    pub fn child_token(&self) -> CancellationToken {
-        self.cancellation_token.child_token()
+    fn child(&self) -> Self {
+        Self {
+            child_token: self.child_token.child_token(),
+            self_token: self.child_token.clone(),
+            ..self.clone()
+        }
     }
 
     pub fn take_service(&self, id: &TaskId) -> Option<ServiceInfo> {
@@ -58,13 +62,52 @@ impl ServiceContext {
         }
     }
 
+    pub async fn wait_for_shutdown(
+        &self,
+        id: &TaskId,
+    ) -> Option<Result<(), BackgroundServiceError>> {
+        if let Some((_, service)) = self.services.remove(id) {
+            Some(service.wait_for_shutdown().await)
+        } else {
+            None
+        }
+    }
+
+    pub fn cancel_service(&self, id: &TaskId) {
+        if let Some(service) = self.services.get(id) {
+            service.cancel();
+        }
+    }
+
+    pub fn abort_service(&self, id: &TaskId) {
+        if let Some(service) = self.services.get(id) {
+            service.abort();
+        }
+    }
+
+    pub fn cancel_all(&self) {
+        self.root_token.cancel();
+    }
+
+    pub fn cancel_children(&self) {
+        self.child_token.cancel();
+    }
+
+    pub fn cancelled(&self) -> WaitForCancellationFuture {
+        self.self_token.cancelled()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.self_token.is_cancelled()
+    }
+
     pub fn spawn<S: BackgroundService + Send + 'static>(&self, service: S) -> TaskId {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
-
+        let child = self.child();
         let id = next_id();
 
-        let handle = self.tracker.spawn(self.get_service_future(id, service));
+        let handle = self.tracker.spawn(child.get_service_future(id, service));
         self.services.insert(
             id,
             ServiceInfo {
@@ -72,6 +115,7 @@ impl ServiceContext {
                 handle,
                 name,
                 timeout,
+                cancellation_token: child.self_token,
             },
         );
         id
@@ -84,12 +128,12 @@ impl ServiceContext {
     ) -> TaskId {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
-
+        let child = self.child();
         let id = next_id();
 
         let handle = self
             .tracker
-            .spawn_on(self.get_service_future(id, service), handle);
+            .spawn_on(child.get_service_future(id, service), handle);
         self.services.insert(
             id,
             ServiceInfo {
@@ -97,6 +141,7 @@ impl ServiceContext {
                 handle,
                 name,
                 timeout,
+                cancellation_token: child.self_token,
             },
         );
         id
@@ -105,12 +150,12 @@ impl ServiceContext {
     pub fn spawn_local<S: LocalBackgroundService + 'static>(&self, service: S) -> TaskId {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
-
+        let child = self.child();
         let id = next_id();
 
         let handle = self
             .tracker
-            .spawn_local(self.get_service_future_local(id, service));
+            .spawn_local(child.get_service_future_local(id, service));
         self.services.insert(
             id,
             ServiceInfo {
@@ -118,6 +163,7 @@ impl ServiceContext {
                 handle,
                 name,
                 timeout,
+                cancellation_token: child.self_token,
             },
         );
         id
@@ -130,12 +176,12 @@ impl ServiceContext {
     ) -> TaskId {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
-
+        let child = self.child();
         let id = next_id();
 
         let handle = self
             .tracker
-            .spawn_local_on(self.get_service_future(id, service), local_set);
+            .spawn_local_on(child.get_service_future(id, service), local_set);
         self.services.insert(
             id,
             ServiceInfo {
@@ -143,6 +189,7 @@ impl ServiceContext {
                 handle,
                 name,
                 timeout,
+                cancellation_token: child.self_token,
             },
         );
         id
@@ -151,12 +198,12 @@ impl ServiceContext {
     pub fn spawn_blocking<S: BlockingBackgroundService + Send + 'static>(&self, service: S) {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
-
+        let child = self.child();
         let id = next_id();
 
         let handle = self
             .tracker
-            .spawn_blocking(self.get_service_blocking(id, service));
+            .spawn_blocking(child.get_service_blocking(id, service));
         self.services.insert(
             id,
             ServiceInfo {
@@ -164,6 +211,7 @@ impl ServiceContext {
                 handle,
                 name,
                 timeout,
+                cancellation_token: child.self_token,
             },
         );
     }
@@ -175,12 +223,12 @@ impl ServiceContext {
     ) {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
-
+        let child = self.child();
         let id = next_id();
 
         let handle = self
             .tracker
-            .spawn_blocking_on(self.get_service_blocking(id, service), handle);
+            .spawn_blocking_on(child.get_service_blocking(id, service), handle);
         self.services.insert(
             id,
             ServiceInfo {
@@ -188,6 +236,7 @@ impl ServiceContext {
                 handle,
                 name,
                 timeout,
+                cancellation_token: child.self_token,
             },
         );
     }
@@ -202,7 +251,7 @@ impl ServiceContext {
         let services = self.services.clone();
 
         async move {
-            let cancellation_token = context.cancellation_token();
+            let cancellation_token = context.root_token.clone();
             let res = service.run(context).await;
             // If cancellation was requested, the manager is being shut down anyway
             // so we don't need to remove the service
@@ -229,7 +278,7 @@ impl ServiceContext {
         let services = self.services.clone();
 
         async move {
-            let cancellation_token = context.cancellation_token();
+            let cancellation_token = context.root_token.clone();
             let res = service.run(context).await;
             // If cancellation was requested, the manager is being shut down anyway
             // so we don't need to remove the service
@@ -256,7 +305,7 @@ impl ServiceContext {
         let services = self.services.clone();
 
         move || {
-            let cancellation_token = context.cancellation_token();
+            let cancellation_token = context.root_token.clone();
             let res = service.run(context);
             // If cancellation was requested, the manager is being shut down anyway
             // so we don't need to remove the service

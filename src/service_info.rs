@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::error::{BackgroundServiceError, BoxedError};
@@ -12,10 +13,11 @@ pub struct ServiceInfo {
     pub(crate) id: TaskId,
     pub(crate) timeout: Duration,
     pub(crate) handle: JoinHandle<Result<(), BoxedError>>,
+    pub(crate) cancellation_token: CancellationToken,
 }
 
 impl ServiceInfo {
-    pub async fn shutdown(self) -> Result<(), BackgroundServiceError> {
+    pub async fn wait_for_shutdown(self) -> Result<(), BackgroundServiceError> {
         let abort_handle = self.handle.abort_handle();
         match tokio::time::timeout(self.timeout, self.handle).await {
             Ok(Ok(Ok(_))) => {
@@ -51,5 +53,9 @@ impl ServiceInfo {
 
     pub fn abort(&self) {
         self.handle.abort();
+    }
+
+    pub fn cancel(&self) {
+        self.cancellation_token.cancel();
     }
 }

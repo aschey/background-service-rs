@@ -13,9 +13,9 @@ pub async fn main() {
     let context = manager.get_context();
     context.spawn_blocking(("blocking", move |context: ServiceContext| {
         let mut seconds = 0;
-        let cancellation_token = context.cancellation_token();
+
         loop {
-            if cancellation_token.is_cancelled() {
+            if context.is_cancelled() {
                 return Ok(());
             }
             info!("Service has been running for {seconds} seconds");
@@ -25,10 +25,10 @@ pub async fn main() {
     }));
 
     context.spawn(Service);
-    let token = context.cancellation_token();
+
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(10)).await;
-        token.cancel();
+        context.cancel_all();
     });
     manager.join_on_cancel().await.unwrap();
 }
@@ -44,7 +44,6 @@ impl BackgroundService for Service {
     }
 
     async fn run(self, context: ServiceContext) -> Result<(), BoxedError> {
-        let cancellation_token = context.cancellation_token();
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(3)) => {
@@ -52,7 +51,7 @@ impl BackgroundService for Service {
 
                     context.spawn(("child", |context: ServiceContext| async move {
                         info!("Service waiting for cancellation");
-                        context.cancellation_token().cancelled().await;
+                        context.cancelled().await;
                         info!("Received cancellation request");
                         Ok(())
                     }));
@@ -62,7 +61,7 @@ impl BackgroundService for Service {
                         Ok(())
                     }));
                 }
-                _ = cancellation_token.cancelled() => {
+                _ = context.cancelled() => {
                     info!("Received cancellation request. Waiting 1 second to shut down.");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     return Ok(());

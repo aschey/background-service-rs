@@ -13,14 +13,14 @@ pub async fn main() {
     let context = manager.get_context();
     context.spawn(("simple", |context: ServiceContext| async move {
         let mut seconds = 0;
-        let cancellation_token = context.cancellation_token();
+
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(1)) => {
                     info!("Service has been running for {seconds} seconds");
                     seconds += 1;
                 }
-                _ = cancellation_token.cancelled() => {
+                _ =  context.cancelled() => {
                     info!("Received cancellation request");
                     return Ok(());
                 }
@@ -29,7 +29,7 @@ pub async fn main() {
     }));
 
     context.spawn(Service);
-    let token = context.cancellation_token();
+
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(10)).await;
         token.cancel();
@@ -48,7 +48,6 @@ impl BackgroundService for Service {
     }
 
     async fn run(self, context: ServiceContext) -> Result<(), BoxedError> {
-        let cancellation_token = context.cancellation_token();
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(3)) => {
@@ -56,7 +55,7 @@ impl BackgroundService for Service {
 
                     context.spawn(("child", |context: ServiceContext| async move {
                         info!("Service waiting for cancellation");
-                        context.cancellation_token().cancelled().await;
+                        context.cancelled().await;
                         info!("Received cancellation request");
                         Ok(())
                     }));
@@ -66,7 +65,7 @@ impl BackgroundService for Service {
                         Ok(())
                     }));
                 }
-                _ = cancellation_token.cancelled() => {
+                _ =  context.cancelled() => {
                     info!("Received cancellation request. Waiting 1 second to shut down.");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     return Ok(());

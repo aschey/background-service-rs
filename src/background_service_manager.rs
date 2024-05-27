@@ -106,7 +106,7 @@ impl BackgroundServiceManager {
         let keys: Vec<_> = self.services.iter().map(|s| *s.key()).collect();
         for key in keys {
             if let Some((_, service)) = self.services.remove(&key) {
-                unordered.push(service.shutdown());
+                unordered.push(service.wait_for_shutdown());
             }
         }
 
