@@ -6,11 +6,12 @@ use dashmap::DashMap;
 use futures::stream::FuturesUnordered;
 use futures::{future, StreamExt};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tokio_util::task::TaskTracker;
+use tracing::debug;
 
 use crate::error::{BackgroundServiceError, BackgroundServiceErrors};
 use crate::service_info::ServiceInfo;
-use crate::ServiceContext;
+use crate::{ServiceContext, TaskId};
 
 static MONITOR_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
@@ -30,7 +31,8 @@ impl Settings {
 #[derive(Debug)]
 pub struct BackgroundServiceManager {
     cancellation_token: CancellationToken,
-    services: Arc<DashMap<u64, ServiceInfo>>,
+    services: Arc<DashMap<TaskId, ServiceInfo>>,
+    tracker: TaskTracker,
 }
 
 impl BackgroundServiceManager {
@@ -58,6 +60,7 @@ impl BackgroundServiceManager {
 
         Self {
             services: Default::default(),
+            tracker: TaskTracker::new(),
             cancellation_token,
         }
     }
@@ -81,39 +84,28 @@ impl BackgroundServiceManager {
 
     pub async fn cancel(self) -> Result<(), BackgroundServiceErrors> {
         self.cancellation_token.cancel();
+        self.tracker.close();
         let unordered = FuturesUnordered::new();
 
         let keys: Vec<_> = self.services.iter().map(|s| *s.key()).collect();
         for key in keys {
             if let Some((_, service)) = self.services.remove(&key) {
-                unordered.push(async move {
-                    let abort_handle = service.handle.abort_handle();
-                    match tokio::time::timeout(service.timeout, service.handle).await {
-                        Ok(Ok(Ok(_))) => {
-                            info!("Worker {} shutdown successfully", service.name);
-                            Ok(())
-                        }
-                        Ok(Ok(Err(e))) => Err(BackgroundServiceError::ExecutionFailure(
-                            service.name.to_owned(),
-                            e,
-                        )),
-                        Ok(Err(e)) => Err(BackgroundServiceError::ExecutionPanic(
-                            service.name.to_owned(),
-                            e,
-                        )),
-                        Err(_) => {
-                            abort_handle.abort();
-                            Err(BackgroundServiceError::TimedOut(service.name.to_owned()))
-                        }
-                    }
-                });
+                unordered.push(service.shutdown());
             }
         }
 
-        let errors = unordered
+        let mut errors = unordered
             .filter_map(|r| future::ready(r.err()))
             .collect::<Vec<_>>()
             .await;
+
+        // All tasks should be finished at this point
+        if tokio::time::timeout(Duration::from_millis(0), self.tracker.wait())
+            .await
+            .is_err()
+        {
+            errors.push(BackgroundServiceError::TimedOut("TaskTracker".to_owned()))
+        }
 
         if errors.is_empty() {
             Ok(())
@@ -123,6 +115,10 @@ impl BackgroundServiceManager {
     }
 
     pub fn get_context(&self) -> ServiceContext {
-        ServiceContext::new(self.services.clone(), self.cancellation_token.clone())
+        ServiceContext::new(
+            self.services.clone(),
+            self.tracker.clone(),
+            self.cancellation_token.clone(),
+        )
     }
 }

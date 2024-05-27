@@ -10,25 +10,21 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
     let manager = BackgroundServiceManager::new(token.clone(), Settings::default());
-    let mut context = manager.get_context();
-    context.add_service(("simple", |context: ServiceContext| async move {
+    let context = manager.get_context();
+    context.spawn_blocking(("blocking", move |context: ServiceContext| {
         let mut seconds = 0;
         let cancellation_token = context.cancellation_token();
         loop {
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                    info!("Service has been running for {seconds} seconds");
-                    seconds += 1;
-                }
-                _ = cancellation_token.cancelled() => {
-                    info!("Received cancellation request");
-                    return Ok(());
-                }
+            if cancellation_token.is_cancelled() {
+                return Ok(());
             }
+            info!("Service has been running for {seconds} seconds");
+            seconds += 1;
+            std::thread::sleep(Duration::from_secs(1));
         }
     }));
 
-    context.add_service(Service);
+    context.spawn(Service);
     let token = context.cancellation_token();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(10)).await;
@@ -47,21 +43,21 @@ impl BackgroundService for Service {
         "service"
     }
 
-    async fn run(self, mut context: ServiceContext) -> Result<(), BoxedError> {
+    async fn run(self, context: ServiceContext) -> Result<(), BoxedError> {
         let cancellation_token = context.cancellation_token();
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(3)) => {
                     info!("Spawning another service");
 
-                    context.add_service(("child", |context: ServiceContext| async move {
+                    context.spawn(("child", |context: ServiceContext| async move {
                         info!("Service waiting for cancellation");
                         context.cancellation_token().cancelled().await;
                         info!("Received cancellation request");
                         Ok(())
                     }));
 
-                    context.add_service(("child2", |_: ServiceContext| async move {
+                    context.spawn(("child2", |_: ServiceContext| async move {
                         info!("exiting");
                         Ok(())
                     }));

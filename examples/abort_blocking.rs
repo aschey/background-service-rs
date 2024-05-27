@@ -13,9 +13,9 @@ pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
     let manager = BackgroundServiceManager::new(token.clone(), Settings::default().blocking_task_monitor_interval(Duration::from_secs(2)));
-    let mut context = manager.get_context();
+    let context = manager.get_context();
 
-    context.add_service(("blocking", |_: ServiceContext| async move {
+    context.spawn(("blocking", |_: ServiceContext| async move {
         let orig_thread_id = format!("{:?}", thread::current().id());
         let mut switched = false;
         loop {
@@ -37,7 +37,7 @@ pub async fn main() {
         }
     }));
 
-    context.add_service(("nonblocking", |_: ServiceContext| async move {
+    context.spawn(("nonblocking", |_: ServiceContext| async move {
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
             println!("{:?}: nonblocking still alive", thread::current().id());
