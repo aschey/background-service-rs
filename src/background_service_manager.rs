@@ -7,7 +7,7 @@ use futures::stream::FuturesUnordered;
 use futures::{future, StreamExt};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::error::{BackgroundServiceError, BackgroundServiceErrors};
 use crate::service_info::ServiceInfo;
@@ -120,7 +120,10 @@ impl BackgroundServiceManager {
             .settings
             .task_wait_duration
             .saturating_sub(Instant::now() - start_time);
-        // All tasks should be finished at this point
+
+        info!("Waiting for any remaining tasks");
+        // This should return immediately unless any services are being awaited independently
+        // via ServiceContext::take_service
         if tokio::time::timeout(remaining_wait_time, self.tracker.wait())
             .await
             .is_err()

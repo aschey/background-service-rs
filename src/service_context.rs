@@ -50,7 +50,7 @@ impl ServiceContext {
         self.cancellation_token.child_token()
     }
 
-    pub async fn take_service(&self, id: &TaskId) -> Option<ServiceInfo> {
+    pub fn take_service(&self, id: &TaskId) -> Option<ServiceInfo> {
         if let Some((_, service)) = self.services.remove(id) {
             Some(service)
         } else {
