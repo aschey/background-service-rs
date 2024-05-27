@@ -253,18 +253,7 @@ impl ServiceContext {
         async move {
             let cancellation_token = context.root_token.clone();
             let res = service.run(context).await;
-            // If cancellation was requested, the manager is being shut down anyway
-            // so we don't need to remove the service
-            if !cancellation_token.is_cancelled() {
-                if let Some((_, service)) = services.remove(&id) {
-                    info!("Removing {}", service.name);
-                    if let Err(e) = &res {
-                        error!("Service {} exited with error: {e:?}", service.name);
-                    }
-                }
-            }
-
-            res
+            handle_service_remove(&id, res, services, cancellation_token)
         }
     }
 
@@ -280,18 +269,7 @@ impl ServiceContext {
         async move {
             let cancellation_token = context.root_token.clone();
             let res = service.run(context).await;
-            // If cancellation was requested, the manager is being shut down anyway
-            // so we don't need to remove the service
-            if !cancellation_token.is_cancelled() {
-                if let Some((_, service)) = services.remove(&id) {
-                    info!("Removing {}", service.name);
-                    if let Err(e) = &res {
-                        error!("Service {} exited with error: {e:?}", service.name);
-                    }
-                }
-            }
-
-            res
+            handle_service_remove(&id, res, services, cancellation_token)
         }
     }
 
@@ -307,18 +285,27 @@ impl ServiceContext {
         move || {
             let cancellation_token = context.root_token.clone();
             let res = service.run(context);
-            // If cancellation was requested, the manager is being shut down anyway
-            // so we don't need to remove the service
-            if !cancellation_token.is_cancelled() {
-                if let Some((_, service)) = services.remove(&id) {
-                    info!("Removing {}", service.name);
-                    if let Err(e) = &res {
-                        error!("Service {} exited with error: {e:?}", service.name);
-                    }
-                }
-            }
-
-            res
+            handle_service_remove(&id, res, services, cancellation_token)
         }
     }
+}
+
+fn handle_service_remove(
+    id: &TaskId,
+    res: Result<(), BoxedError>,
+    services: Arc<DashMap<TaskId, ServiceInfo>>,
+    cancellation_token: CancellationToken,
+) -> Result<(), BoxedError> {
+    // If cancellation was requested, the manager is being shut down anyway
+    // so we don't need to remove the service
+    if !cancellation_token.is_cancelled() {
+        if let Some((_, service)) = services.remove(id) {
+            info!("Removing {}", service.name);
+            if let Err(e) = &res {
+                error!("Service {} exited with error: {e:?}", service.name);
+            }
+        }
+    }
+
+    res
 }
