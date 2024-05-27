@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use futures::stream::FuturesUnordered;
@@ -15,16 +15,30 @@ use crate::{ServiceContext, TaskId};
 
 static MONITOR_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Settings {
     blocking_task_monitor_interval: Option<Duration>,
+    task_wait_duration: Duration,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            blocking_task_monitor_interval: None,
+            task_wait_duration: Duration::from_secs(1),
+        }
+    }
 }
 
 impl Settings {
-    pub fn blocking_task_monitor_interval(self, interval: Duration) -> Self {
-        Self {
-            blocking_task_monitor_interval: Some(interval),
-        }
+    pub fn blocking_task_monitor_interval(mut self, interval: Duration) -> Self {
+        self.blocking_task_monitor_interval = Some(interval);
+        self
+    }
+
+    pub fn task_wait_duration(mut self, task_wait_duration: Duration) -> Self {
+        self.task_wait_duration = task_wait_duration;
+        self
     }
 }
 
@@ -33,6 +47,7 @@ pub struct BackgroundServiceManager {
     cancellation_token: CancellationToken,
     services: Arc<DashMap<TaskId, ServiceInfo>>,
     tracker: TaskTracker,
+    settings: Settings,
 }
 
 impl BackgroundServiceManager {
@@ -62,6 +77,7 @@ impl BackgroundServiceManager {
             services: Default::default(),
             tracker: TaskTracker::new(),
             cancellation_token,
+            settings,
         }
     }
 
@@ -94,13 +110,18 @@ impl BackgroundServiceManager {
             }
         }
 
+        let start_time = Instant::now();
         let mut errors = unordered
             .filter_map(|r| future::ready(r.err()))
             .collect::<Vec<_>>()
             .await;
 
+        let remaining_wait_time = self
+            .settings
+            .task_wait_duration
+            .saturating_sub(Instant::now() - start_time);
         // All tasks should be finished at this point
-        if tokio::time::timeout(Duration::from_millis(0), self.tracker.wait())
+        if tokio::time::timeout(remaining_wait_time, self.tracker.wait())
             .await
             .is_err()
         {
