@@ -195,7 +195,10 @@ impl ServiceContext {
         id
     }
 
-    pub fn spawn_blocking<S: BlockingBackgroundService + Send + 'static>(&self, service: S) {
+    pub fn spawn_blocking<S: BlockingBackgroundService + Send + 'static>(
+        &self,
+        service: S,
+    ) -> TaskId {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
         let child = self.child();
@@ -214,13 +217,14 @@ impl ServiceContext {
                 cancellation_token: child.self_token,
             },
         );
+        id
     }
 
     pub fn spawn_blocking_on<S: BlockingBackgroundService + Send + 'static>(
         &self,
         service: S,
         handle: &Handle,
-    ) {
+    ) -> TaskId {
         let name = service.name().to_owned();
         let timeout = service.shutdown_timeout();
         let child = self.child();
@@ -239,6 +243,7 @@ impl ServiceContext {
                 cancellation_token: child.self_token,
             },
         );
+        id
     }
 
     fn get_service_future<S: BackgroundService + 'static>(

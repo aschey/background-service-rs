@@ -9,7 +9,7 @@ thiserror = "1"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
 tokio-util = { version = "0.7.10", features = ["rt"] }
 tracing = "0.1"
-dashmap = "5"
+dashmap = "6"
 
 [features]
 signal = ["tokio/signal"]
