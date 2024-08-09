@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use background_service::error::BoxedError;
-use background_service::{BackgroundService, BackgroundServiceManager, ServiceContext, Settings};
+use background_service::{BackgroundService, Manager, ServiceContext, Settings};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -11,7 +11,7 @@ pub async fn main() {
     let token = CancellationToken::default();
     // Need to increase the task wait duration to prevent service2 from causing a timeout after
     // removal
-    let manager = BackgroundServiceManager::new(
+    let manager = Manager::new(
         token.clone(),
         Settings::default().task_wait_duration(Duration::from_secs(5)),
     );

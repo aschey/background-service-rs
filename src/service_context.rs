@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -11,18 +10,11 @@ use tracing::{error, info};
 
 use crate::error::{BackgroundServiceError, BoxedError};
 use crate::service_info::ServiceInfo;
-use crate::{BackgroundService, BlockingBackgroundService, LocalBackgroundService};
+use crate::{
+    next_id, BackgroundService, BlockingBackgroundService, LocalBackgroundService, TaskId,
+};
 
-static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct TaskId(u64);
-
-fn next_id() -> TaskId {
-    TaskId(NEXT_ID.fetch_add(1, Ordering::SeqCst))
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ServiceContext {
     services: Arc<DashMap<TaskId, ServiceInfo>>,
     tracker: TaskTracker,
@@ -47,9 +39,10 @@ impl ServiceContext {
     }
 
     fn child(&self) -> Self {
+        let self_token = self.child_token.child_token();
         Self {
-            child_token: self.child_token.child_token(),
-            self_token: self.child_token.clone(),
+            child_token: self_token.child_token(),
+            self_token,
             ..self.clone()
         }
     }
@@ -169,7 +162,7 @@ impl ServiceContext {
         id
     }
 
-    pub fn spawn_local_on<S: BackgroundService + 'static>(
+    pub fn spawn_local_on<S: LocalBackgroundService + 'static>(
         &self,
         service: S,
         local_set: &LocalSet,
@@ -181,7 +174,7 @@ impl ServiceContext {
 
         let handle = self
             .tracker
-            .spawn_local_on(child.get_service_future(id, service), local_set);
+            .spawn_local_on(child.get_service_future_local(id, service), local_set);
         self.services.insert(
             id,
             ServiceInfo {

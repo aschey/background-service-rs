@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use background_service::{BackgroundServiceManager, ServiceContext, Settings};
+use background_service::{Manager, ServiceContext, Settings};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -8,7 +8,7 @@ use tracing::info;
 pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
-    let manager = BackgroundServiceManager::new(token.clone(), Settings::default());
+    let manager = Manager::new(token.clone(), Settings::default());
     let context = manager.get_context();
     context.spawn(("service1", |context: ServiceContext| async move {
         tokio::time::sleep(Duration::from_secs(1)).await;

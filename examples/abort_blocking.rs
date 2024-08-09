@@ -4,14 +4,14 @@ use std::process::{self};
 use std::thread;
 use std::time::Duration;
 
-use background_service::{BackgroundServiceManager, ServiceContext, Settings};
+use background_service::{Manager, ServiceContext, Settings};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 pub async fn main() {
     tracing_subscriber::fmt::init();
     let token = CancellationToken::default();
-    let manager = BackgroundServiceManager::new(
+    let manager = Manager::new(
         token.clone(),
         Settings::default().blocking_task_monitor_interval(Duration::from_secs(2)),
     );

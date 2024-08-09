@@ -15,7 +15,7 @@ use crate::{ServiceContext, TaskId};
 
 static MONITOR_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Settings {
     blocking_task_monitor_interval: Option<Duration>,
     task_wait_duration: Duration,
@@ -43,15 +43,16 @@ impl Settings {
 }
 
 #[derive(Debug)]
-pub struct BackgroundServiceManager {
+pub struct Manager {
     cancellation_token: CancellationToken,
     services: Arc<DashMap<TaskId, ServiceInfo>>,
     tracker: TaskTracker,
     settings: Settings,
 }
 
-impl BackgroundServiceManager {
+impl Manager {
     pub fn new(cancellation_token: CancellationToken, settings: Settings) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(monitor_interval) = settings.blocking_task_monitor_interval {
             if !MONITOR_INITIALIZED.swap(true, Ordering::SeqCst) {
                 debug!("initializing monitor");
