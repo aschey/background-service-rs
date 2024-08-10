@@ -1,13 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use futures::Future;
-use tokio::runtime::Handle;
-use tokio::task::LocalSet;
 use tokio_util::sync::{CancellationToken, WaitForCancellationFuture};
-use tokio_util::task::TaskTracker;
 use tracing::{error, info};
 
 use crate::error::{BackgroundServiceError, BoxedError};

@@ -1,17 +1,14 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use futures::stream::FuturesUnordered;
 use futures::{future, StreamExt};
 use tokio_util::sync::CancellationToken;
-use tokio_util::task::TaskTracker;
-use tracing::{debug, info};
 
-use crate::error::{BackgroundServiceError, BackgroundServiceErrors};
+use crate::error::BackgroundServiceErrors;
 use crate::service_context_wasm::ServiceContext;
 use crate::service_info_wasm::ServiceInfo;
 use crate::TaskId;
@@ -97,7 +94,7 @@ impl Manager {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(BackgroundServiceErrors(errors))
+            Err(BackgroundServiceErrors(Arc::new(errors)))
         }
     }
 

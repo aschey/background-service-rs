@@ -135,7 +135,7 @@ impl Manager {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(BackgroundServiceErrors(errors))
+            Err(BackgroundServiceErrors(Arc::new(errors)))
         }
     }
 

@@ -1,9 +1,8 @@
 use std::time::Duration;
 
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use crate::error::{BackgroundServiceError, BoxedError};
+use crate::error::BackgroundServiceError;
 use crate::TaskId;
 
 #[derive(Debug)]

@@ -1,10 +1,11 @@
 use std::error::Error;
+use std::sync::Arc;
 
 use tokio::task::JoinError;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 #[error("Some background services failed to execute: {0:?}")]
-pub struct BackgroundServiceErrors(pub Vec<BackgroundServiceError>);
+pub struct BackgroundServiceErrors(pub Arc<Vec<BackgroundServiceError>>);
 
 impl BackgroundServiceErrors {
     pub fn timed_out(&self) -> Vec<String> {
