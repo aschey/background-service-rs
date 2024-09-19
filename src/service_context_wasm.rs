@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use futures::Future;
-use tokio_util::sync::{CancellationToken, WaitForCancellationFuture};
+use tokio_util::sync::{
+    CancellationToken, WaitForCancellationFuture, WaitForCancellationFutureOwned,
+};
 use tracing::{error, info};
 
 use crate::error::{BackgroundServiceError, BoxedError};
@@ -74,6 +76,10 @@ impl ServiceContext {
 
     pub fn cancelled(&self) -> WaitForCancellationFuture {
         self.self_token.cancelled()
+    }
+
+    pub fn cancelled_owned(&self) -> WaitForCancellationFutureOwned {
+        self.self_token.clone().cancelled_owned()
     }
 
     pub fn is_cancelled(&self) -> bool {
