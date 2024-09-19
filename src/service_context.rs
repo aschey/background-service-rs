@@ -4,7 +4,9 @@ use dashmap::DashMap;
 use futures::Future;
 use tokio::runtime::Handle;
 use tokio::task::LocalSet;
-use tokio_util::sync::{CancellationToken, WaitForCancellationFuture};
+use tokio_util::sync::{
+    CancellationToken, WaitForCancellationFuture, WaitForCancellationFutureOwned,
+};
 use tokio_util::task::TaskTracker;
 use tracing::{error, info};
 
@@ -88,6 +90,10 @@ impl ServiceContext {
 
     pub fn cancelled(&self) -> WaitForCancellationFuture {
         self.self_token.cancelled()
+    }
+
+    pub fn cancelled_owned(&self) -> WaitForCancellationFutureOwned {
+        self.self_token.clone().cancelled_owned()
     }
 
     pub fn is_cancelled(&self) -> bool {
