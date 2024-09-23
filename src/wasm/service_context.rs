@@ -8,9 +8,9 @@ use tokio_util::sync::{
 };
 use tracing::{error, info};
 
+use super::service_info::ServiceInfo;
 use crate::error::{BackgroundServiceError, BoxedError};
-use crate::service_info_wasm::ServiceInfo;
-use crate::{next_id, BackgroundService, LocalBackgroundService, TaskId};
+use crate::{BackgroundService, LocalBackgroundService, TaskId, next_id};
 
 #[derive(Clone, Debug)]
 pub struct ServiceContext {
@@ -96,15 +96,12 @@ impl ServiceContext {
         wasm_compat::futures::spawn(async move {
             let _ = fut.await.inspect_err(|e| error!("{e:?}"));
         });
-        self.services.borrow_mut().insert(
+        self.services.borrow_mut().insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
@@ -118,15 +115,12 @@ impl ServiceContext {
         wasm_compat::futures::spawn_local(async move {
             let _ = fut.await.inspect_err(|e| error!("{e:?}"));
         });
-        self.services.borrow_mut().insert(
+        self.services.borrow_mut().insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 

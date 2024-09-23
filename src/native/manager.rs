@@ -1,16 +1,16 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use futures::stream::FuturesUnordered;
-use futures::{future, StreamExt};
+use futures::{StreamExt, future};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{debug, info};
 
+use super::service_info::ServiceInfo;
 use crate::error::{BackgroundServiceError, BackgroundServiceErrors};
-use crate::service_info::ServiceInfo;
 use crate::{ServiceContext, TaskId};
 
 static MONITOR_INITIALIZED: AtomicBool = AtomicBool::new(false);

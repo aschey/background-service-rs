@@ -1,29 +1,17 @@
 pub mod error;
 #[cfg(not(target_arch = "wasm32"))]
-mod manager;
+mod native;
 #[cfg(target_arch = "wasm32")]
-mod manager_wasm;
-#[cfg(not(target_arch = "wasm32"))]
-mod service_context;
-#[cfg(target_arch = "wasm32")]
-mod service_context_wasm;
-#[cfg(not(target_arch = "wasm32"))]
-mod service_info;
-#[cfg(target_arch = "wasm32")]
-mod service_info_wasm;
+mod wasm;
 
 use std::time::Duration;
 
 use error::BoxedError;
 use futures::Future;
 #[cfg(not(target_arch = "wasm32"))]
-pub use manager::*;
+pub use native::*;
 #[cfg(target_arch = "wasm32")]
-pub use manager_wasm::*;
-#[cfg(not(target_arch = "wasm32"))]
-pub use service_context::*;
-#[cfg(target_arch = "wasm32")]
-pub use service_context_wasm::*;
+pub use wasm::*;
 use wasm_compat::cell::U64Cell;
 
 wasm_compat::static_init! {

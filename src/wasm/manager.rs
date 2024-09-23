@@ -5,13 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::stream::FuturesUnordered;
-use futures::{future, StreamExt};
+use futures::{StreamExt, future};
 use tokio_util::sync::CancellationToken;
 
-use crate::error::BackgroundServiceErrors;
-use crate::service_context_wasm::ServiceContext;
-use crate::service_info_wasm::ServiceInfo;
+use super::service_context::ServiceContext;
+use super::service_info::ServiceInfo;
 use crate::TaskId;
+use crate::error::BackgroundServiceErrors;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Settings {

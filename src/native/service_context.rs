@@ -10,10 +10,10 @@ use tokio_util::sync::{
 use tokio_util::task::TaskTracker;
 use tracing::{error, info};
 
+use super::service_info::ServiceInfo;
 use crate::error::{BackgroundServiceError, BoxedError};
-use crate::service_info::ServiceInfo;
 use crate::{
-    next_id, BackgroundService, BlockingBackgroundService, LocalBackgroundService, TaskId,
+    BackgroundService, BlockingBackgroundService, LocalBackgroundService, TaskId, next_id,
 };
 
 #[derive(Clone, Debug)]
@@ -107,16 +107,13 @@ impl ServiceContext {
         let id = next_id();
 
         let handle = self.tracker.spawn(child.get_service_future(id, service));
-        self.services.insert(
+        self.services.insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                handle,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            handle,
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
@@ -133,16 +130,13 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_on(child.get_service_future(id, service), handle);
-        self.services.insert(
+        self.services.insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                handle,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            handle,
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
@@ -155,16 +149,13 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_local(child.get_service_future_local(id, service));
-        self.services.insert(
+        self.services.insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                handle,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            handle,
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
@@ -181,16 +172,13 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_local_on(child.get_service_future_local(id, service), local_set);
-        self.services.insert(
+        self.services.insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                handle,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            handle,
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
@@ -206,16 +194,13 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_blocking(child.get_service_blocking(id, service));
-        self.services.insert(
+        self.services.insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                handle,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            handle,
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
@@ -232,16 +217,13 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_blocking_on(child.get_service_blocking(id, service), handle);
-        self.services.insert(
+        self.services.insert(id, ServiceInfo {
             id,
-            ServiceInfo {
-                id,
-                handle,
-                name,
-                timeout,
-                cancellation_token: child.self_token,
-            },
-        );
+            handle,
+            name,
+            timeout,
+            cancellation_token: child.self_token,
+        });
         id
     }
 
