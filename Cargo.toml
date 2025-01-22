@@ -8,12 +8,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 futures = "0.3"
-thiserror = "1"
+thiserror = "2"
 tokio = { version = "1", features = ["time", "rt"] }
 tokio-util = { version = "0.7.10", features = ["rt"] }
 tracing = "0.1"
-wasm-compat = { git = "https://github.com/aschey/wasm-compat", rev = "98287ef1046e4c8694e0b90fbb0d0986573a1969", features = [
-    "all",
+wasm-compat = { git = "https://github.com/aschey/wasm-compat", rev = "ef5760036e0c49d3bc8b5e0d85722f6b88bc9f87", features = [
+  "all",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
