@@ -15,7 +15,7 @@ pub async fn main() {
         let mut seconds = 0;
 
         loop {
-            if context.is_cancelled() {
+            if context.cancellation_token().is_cancelled() {
                 return Ok(());
             }
             info!("Service has been running for {seconds} seconds");
@@ -51,7 +51,7 @@ impl BackgroundService for Service {
 
                     context.spawn(("child", |context: ServiceContext| async move {
                         info!("Service waiting for cancellation");
-                        context.cancelled().await;
+                        context.cancellation_token().cancelled().await;
                         info!("Received cancellation request");
                         Ok(())
                     }));
@@ -61,7 +61,7 @@ impl BackgroundService for Service {
                         Ok(())
                     }));
                 }
-                _ = context.cancelled() => {
+                _ = context.cancellation_token().cancelled() => {
                     info!("Received cancellation request. Waiting 1 second to shut down.");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     return Ok(());

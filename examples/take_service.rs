@@ -47,7 +47,7 @@ impl BackgroundService for Service {
 
                     context.spawn(("child", |context: ServiceContext| async move {
                         info!("Service waiting for cancellation");
-                        context.cancelled().await;
+                        context.cancellation_token().cancelled().await;
                         info!("Received cancellation request");
                         Ok(())
                     }));
@@ -57,7 +57,7 @@ impl BackgroundService for Service {
                         Ok(())
                     }));
                 }
-                _ =  context.cancelled() => {
+                _ =  context.cancellation_token().cancelled() => {
                     info!("Received cancellation request. Waiting 1 second to shut down.");
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     return Ok(());
@@ -87,7 +87,7 @@ impl BackgroundService for Service2 {
                     info!("Service has been running for {seconds} seconds");
                     seconds += 1;
                 }
-                _ =  context.cancelled() => {
+                _ =  context.cancellation_token().cancelled() => {
                     info!("Received cancellation request. Waiting 4 seconds to shut down.");
                     tokio::time::sleep(Duration::from_secs(4)).await;
                     return Ok(());

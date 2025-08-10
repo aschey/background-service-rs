@@ -3,9 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use futures::Future;
-use tokio_util::sync::{
-    CancellationToken, WaitForCancellationFuture, WaitForCancellationFutureOwned,
-};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
 use super::service_info::ServiceInfo;
@@ -74,16 +72,8 @@ impl ServiceContext {
         self.child_token.cancel();
     }
 
-    pub fn cancelled(&self) -> WaitForCancellationFuture {
-        self.self_token.cancelled()
-    }
-
-    pub fn cancelled_owned(&self) -> WaitForCancellationFutureOwned {
-        self.self_token.clone().cancelled_owned()
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.self_token.is_cancelled()
+    pub fn cancellation_token(&self) -> &CancellationToken {
+        &self.self_token
     }
 
     pub fn spawn<S: BackgroundService + 'static>(&self, service: S) -> TaskId {
@@ -96,12 +86,15 @@ impl ServiceContext {
         wasm_compat::futures::spawn(async move {
             let _ = fut.await.inspect_err(|e| error!("{e:?}"));
         });
-        self.services.borrow_mut().insert(id, ServiceInfo {
+        self.services.borrow_mut().insert(
             id,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -115,12 +108,15 @@ impl ServiceContext {
         wasm_compat::futures::spawn_local(async move {
             let _ = fut.await.inspect_err(|e| error!("{e:?}"));
         });
-        self.services.borrow_mut().insert(id, ServiceInfo {
+        self.services.borrow_mut().insert(
             id,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -128,7 +124,7 @@ impl ServiceContext {
         &self,
         id: TaskId,
         service: S,
-    ) -> impl Future<Output = Result<(), BoxedError>> {
+    ) -> impl Future<Output = Result<(), BoxedError>> + use<S> {
         let context = self.clone();
 
         let services = self.services.clone();
@@ -144,7 +140,7 @@ impl ServiceContext {
         &self,
         id: TaskId,
         service: S,
-    ) -> impl Future<Output = Result<(), BoxedError>> {
+    ) -> impl Future<Output = Result<(), BoxedError>> + use<S> {
         let context = self.clone();
 
         let services = self.services.clone();

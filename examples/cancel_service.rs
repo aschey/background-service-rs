@@ -19,14 +19,14 @@ pub async fn main() {
 
             context.spawn(("service3", |context: ServiceContext| async move {
                 info!("starting service3");
-                context.cancelled().await;
+                context.cancellation_token().cancelled().await;
                 info!("service3 cancelled");
                 Ok(())
             }));
 
             context.spawn(("service4", |context: ServiceContext| async move {
                 info!("starting service4");
-                context.cancelled().await;
+                context.cancellation_token().cancelled().await;
                 info!("service4 cancelled");
                 Ok(())
             }));
@@ -34,14 +34,14 @@ pub async fn main() {
             context.cancel_children();
             tokio::time::sleep(Duration::from_secs(1)).await;
             context.cancel_all();
-            context.cancelled().await;
+            context.cancellation_token().cancelled().await;
             Ok(())
         }));
-        context.cancelled().await;
+        context.cancellation_token().cancelled().await;
         Ok(())
     }));
     let service5 = context.spawn(("service5", |context: ServiceContext| async move {
-        context.cancelled().await;
+        context.cancellation_token().cancelled().await;
         info!("service5 cancelled");
         Ok(())
     }));

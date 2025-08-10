@@ -53,8 +53,8 @@ pub struct Manager {
 impl Manager {
     pub fn new(cancellation_token: CancellationToken, settings: Settings) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(monitor_interval) = settings.blocking_task_monitor_interval {
-            if !MONITOR_INITIALIZED.swap(true, Ordering::SeqCst) {
+        if let Some(monitor_interval) = settings.blocking_task_monitor_interval
+            && !MONITOR_INITIALIZED.swap(true, Ordering::SeqCst) {
                 debug!("initializing monitor");
                 let cancellation_token = cancellation_token.clone();
                 let rt_handle = tokio::runtime::Handle::current();
@@ -72,7 +72,6 @@ impl Manager {
                     }
                 });
             }
-        }
 
         Self {
             services: Default::default(),

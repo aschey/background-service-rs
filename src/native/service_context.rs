@@ -4,9 +4,7 @@ use dashmap::DashMap;
 use futures::Future;
 use tokio::runtime::Handle;
 use tokio::task::LocalSet;
-use tokio_util::sync::{
-    CancellationToken, WaitForCancellationFuture, WaitForCancellationFutureOwned,
-};
+use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{error, info};
 
@@ -88,16 +86,8 @@ impl ServiceContext {
         self.child_token.cancel();
     }
 
-    pub fn cancelled(&self) -> WaitForCancellationFuture {
-        self.self_token.cancelled()
-    }
-
-    pub fn cancelled_owned(&self) -> WaitForCancellationFutureOwned {
-        self.self_token.clone().cancelled_owned()
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.self_token.is_cancelled()
+    pub fn cancellation_token(&self) -> &CancellationToken {
+        &self.self_token
     }
 
     pub fn spawn<S: BackgroundService + Send + 'static>(&self, service: S) -> TaskId {
@@ -107,13 +97,16 @@ impl ServiceContext {
         let id = next_id();
 
         let handle = self.tracker.spawn(child.get_service_future(id, service));
-        self.services.insert(id, ServiceInfo {
+        self.services.insert(
             id,
-            handle,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                handle,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -130,13 +123,16 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_on(child.get_service_future(id, service), handle);
-        self.services.insert(id, ServiceInfo {
+        self.services.insert(
             id,
-            handle,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                handle,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -149,13 +145,16 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_local(child.get_service_future_local(id, service));
-        self.services.insert(id, ServiceInfo {
+        self.services.insert(
             id,
-            handle,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                handle,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -172,13 +171,16 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_local_on(child.get_service_future_local(id, service), local_set);
-        self.services.insert(id, ServiceInfo {
+        self.services.insert(
             id,
-            handle,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                handle,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -194,13 +196,16 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_blocking(child.get_service_blocking(id, service));
-        self.services.insert(id, ServiceInfo {
+        self.services.insert(
             id,
-            handle,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                handle,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -217,13 +222,16 @@ impl ServiceContext {
         let handle = self
             .tracker
             .spawn_blocking_on(child.get_service_blocking(id, service), handle);
-        self.services.insert(id, ServiceInfo {
+        self.services.insert(
             id,
-            handle,
-            name,
-            timeout,
-            cancellation_token: child.self_token,
-        });
+            ServiceInfo {
+                id,
+                handle,
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
         id
     }
 
@@ -231,7 +239,7 @@ impl ServiceContext {
         &self,
         id: TaskId,
         service: S,
-    ) -> impl Future<Output = Result<(), BoxedError>> {
+    ) -> impl Future<Output = Result<(), BoxedError>> + use<S> {
         let context = self.clone();
 
         let services = self.services.clone();
@@ -247,7 +255,7 @@ impl ServiceContext {
         &self,
         id: TaskId,
         service: S,
-    ) -> impl Future<Output = Result<(), BoxedError>> {
+    ) -> impl Future<Output = Result<(), BoxedError>> + use<S> {
         let context = self.clone();
 
         let services = self.services.clone();
@@ -263,7 +271,7 @@ impl ServiceContext {
         &self,
         id: TaskId,
         service: S,
-    ) -> impl FnOnce() -> Result<(), BoxedError> {
+    ) -> impl FnOnce() -> Result<(), BoxedError> + use<S> {
         let context = self.clone();
 
         let services = self.services.clone();
@@ -284,12 +292,12 @@ fn handle_service_remove(
 ) -> Result<(), BoxedError> {
     // If cancellation was requested, the manager is being shut down anyway
     // so we don't need to remove the service
-    if !cancellation_token.is_cancelled() {
-        if let Some((_, service)) = services.remove(id) {
-            info!("Removing {}", service.name);
-            if let Err(e) = &res {
-                error!("Service {} exited with error: {e:?}", service.name);
-            }
+    if !cancellation_token.is_cancelled()
+        && let Some((_, service)) = services.remove(id)
+    {
+        info!("Removing {}", service.name);
+        if let Err(e) = &res {
+            error!("Service {} exited with error: {e:?}", service.name);
         }
     }
 
