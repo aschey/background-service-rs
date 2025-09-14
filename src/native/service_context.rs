@@ -1,8 +1,10 @@
 use std::sync::Arc;
+use std::thread;
 
 use dashmap::DashMap;
 use futures::Future;
 use tokio::runtime::Handle;
+use tokio::sync::oneshot;
 use tokio::task::LocalSet;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -11,7 +13,8 @@ use tracing::{error, info};
 use super::service_info::ServiceInfo;
 use crate::error::{BackgroundServiceError, BoxedError};
 use crate::{
-    BackgroundService, BlockingBackgroundService, LocalBackgroundService, TaskId, next_id,
+    BackgroundService, BlockingBackgroundService, JoinHandle, LocalBackgroundService, TaskId,
+    next_id,
 };
 
 #[derive(Clone, Debug)]
@@ -101,7 +104,7 @@ impl ServiceContext {
             id,
             ServiceInfo {
                 id,
-                handle,
+                handle: JoinHandle::Async(handle),
                 name,
                 timeout,
                 cancellation_token: child.self_token,
@@ -127,7 +130,7 @@ impl ServiceContext {
             id,
             ServiceInfo {
                 id,
-                handle,
+                handle: JoinHandle::Async(handle),
                 name,
                 timeout,
                 cancellation_token: child.self_token,
@@ -149,7 +152,7 @@ impl ServiceContext {
             id,
             ServiceInfo {
                 id,
-                handle,
+                handle: JoinHandle::Async(handle),
                 name,
                 timeout,
                 cancellation_token: child.self_token,
@@ -175,7 +178,7 @@ impl ServiceContext {
             id,
             ServiceInfo {
                 id,
-                handle,
+                handle: JoinHandle::Async(handle),
                 name,
                 timeout,
                 cancellation_token: child.self_token,
@@ -200,7 +203,7 @@ impl ServiceContext {
             id,
             ServiceInfo {
                 id,
-                handle,
+                handle: JoinHandle::Async(handle),
                 name,
                 timeout,
                 cancellation_token: child.self_token,
@@ -226,7 +229,38 @@ impl ServiceContext {
             id,
             ServiceInfo {
                 id,
-                handle,
+                handle: JoinHandle::Async(handle),
+                name,
+                timeout,
+                cancellation_token: child.self_token,
+            },
+        );
+        id
+    }
+
+    pub fn spawn_thread<S: BlockingBackgroundService + Send + 'static>(
+        &self,
+        service: S,
+    ) -> TaskId {
+        let name = service.name().to_owned();
+        let timeout = service.shutdown_timeout();
+        let child = self.child();
+        let id = next_id();
+        let (tx, rx) = oneshot::channel();
+
+        let handle = thread::spawn({
+            let child = child.clone();
+            move || {
+                let res = child.get_service_blocking(id, service)();
+                let _ = tx.send(());
+                res
+            }
+        });
+        self.services.insert(
+            id,
+            ServiceInfo {
+                id,
+                handle: JoinHandle::Sync(handle, rx),
                 name,
                 timeout,
                 cancellation_token: child.self_token,

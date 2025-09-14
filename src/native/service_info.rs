@@ -1,11 +1,54 @@
+use std::error::Error;
+use std::thread;
 use std::time::Duration;
 
-use tokio::task::JoinHandle;
+use tokio::sync::oneshot;
+use tokio::task::{self, AbortHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-use crate::error::{BackgroundServiceError, BoxedError};
 use crate::TaskId;
+use crate::error::{BackgroundServiceError, BoxedError};
+
+#[derive(Debug)]
+pub(crate) enum JoinHandle<T> {
+    Async(task::JoinHandle<T>),
+    Sync(thread::JoinHandle<T>, oneshot::Receiver<()>),
+}
+
+enum WaitResult<T> {
+    TimedOut,
+    Completed(T),
+    JoinError(Box<dyn Error + Send + Sync>),
+}
+
+impl<T> JoinHandle<T> {
+    fn abort_handle(&self) -> Option<AbortHandle> {
+        if let Self::Async(h) = self {
+            Some(h.abort_handle())
+        } else {
+            None
+        }
+    }
+
+    async fn wait(self, timeout: Duration) -> WaitResult<T> {
+        match self {
+            Self::Async(h) => match tokio::time::timeout(timeout, h).await {
+                Ok(Ok(res)) => WaitResult::Completed(res),
+                Ok(Err(e)) => WaitResult::JoinError(e.into()),
+                Err(_) => WaitResult::TimedOut,
+            },
+            Self::Sync(h, rx) => match tokio::time::timeout(timeout, rx).await {
+                Ok(Ok(())) => match h.join() {
+                    Ok(res) => WaitResult::Completed(res),
+                    Err(e) => WaitResult::JoinError(format!("{e:?}").into()),
+                },
+                Ok(Err(e)) => WaitResult::JoinError(e.into()),
+                Err(_) => WaitResult::TimedOut,
+            },
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ServiceInfo {
@@ -19,21 +62,23 @@ pub struct ServiceInfo {
 impl ServiceInfo {
     pub async fn wait_for_shutdown(self) -> Result<(), BackgroundServiceError> {
         let abort_handle = self.handle.abort_handle();
-        match tokio::time::timeout(self.timeout, self.handle).await {
-            Ok(Ok(Ok(_))) => {
+        match self.handle.wait(self.timeout).await {
+            WaitResult::Completed(Ok(())) => {
                 info!("Worker {} shutdown successfully", self.name);
                 Ok(())
             }
-            Ok(Ok(Err(e))) => Err(BackgroundServiceError::ExecutionFailure(
+            WaitResult::Completed(Err(e)) => Err(BackgroundServiceError::ExecutionFailure(
                 self.name.to_owned(),
                 e,
             )),
-            Ok(Err(e)) => Err(BackgroundServiceError::ExecutionPanic(
+            WaitResult::JoinError(e) => Err(BackgroundServiceError::ExecutionPanic(
                 self.name.to_owned(),
                 e,
             )),
-            Err(_) => {
-                abort_handle.abort();
+            WaitResult::TimedOut => {
+                if let Some(h) = abort_handle {
+                    h.abort();
+                }
                 Err(BackgroundServiceError::TimedOut(self.name.to_owned()))
             }
         }
@@ -52,7 +97,9 @@ impl ServiceInfo {
     }
 
     pub fn abort(&self) {
-        self.handle.abort();
+        if let JoinHandle::Async(h) = &self.handle {
+            h.abort();
+        }
     }
 
     pub fn cancel(&self) {

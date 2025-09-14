@@ -1,8 +1,6 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use tokio::task::JoinError;
-
 #[derive(thiserror::Error, Debug, Clone)]
 #[error("Some background services failed to execute: {0:?}")]
 pub struct BackgroundServiceErrors(pub Arc<Vec<BackgroundServiceError>>);
@@ -29,7 +27,7 @@ pub enum BackgroundServiceError {
     #[error("Service {0} encountered an error: {1:?}")]
     ExecutionFailure(String, BoxedError),
     #[error("Service {0} panicked: {1}")]
-    ExecutionPanic(String, JoinError),
+    ExecutionPanic(String, Box<dyn Error + Send + Sync>),
 }
 
 pub type BoxedError = Box<dyn Error + Send + Sync + 'static>;
